@@ -1,9 +1,10 @@
 name: Deploy site to GitHub Pages
 
+# Deploys from the repository's default branch, which is what the github-pages
+# environment allows by default. Rename the branch and this needs updating too.
 on:
   push:
-    branches: [main]
-    paths: ["site/**", ".github/workflows/pages.yml"]
+    branches: [claude/water-meter-usage-q5pibv, main]
   workflow_dispatch:
 
 permissions:

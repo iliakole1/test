@@ -105,6 +105,6 @@ two cannot drift; only its `manifest.json` is checked in.
 ## Deploying
 
 `.github/workflows/pages.yml` runs the tests and publishes `site/` to GitHub
-Pages on every push to `main`. The repository must be public (or on a plan with
-private Pages), and Pages must be set to deploy from **GitHub Actions** under
-Settings → Pages.
+Pages on every push to the default branch. The repository must be public (or on
+a plan with private Pages), and Pages must be set to deploy from **GitHub
+Actions** under Settings → Pages.
