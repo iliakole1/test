@@ -19,12 +19,17 @@ Claude already keeps on your machine. Three ways in, all client-side:
 | You have | Do this |
 | --- | --- |
 | Claude Code | Drop your `~/.claude/projects` folder on the page |
-| Claude chat | Settings → Privacy → Export data, drop the `conversations.json` |
+| Claude chat | Settings → Privacy → Export data, drop `conversations-000.zip` (no need to unzip) |
 | A huge history, or a phone | Run `water_meter.py --export usage.json`, drop that one file |
 
 Claude Code transcripts carry exact token counts. The chat export carries only
 message text, so tokens there are estimated at ~4 characters per token and are
 correspondingly rougher.
+
+The export downloads as ZIPs, and both the app and the CLI read them directly —
+the app unpacks them in the browser with `DecompressionStream`, no library and
+no upload. Note the download links in the export manifest are **single-use**, so
+spend them on the machine you are logged in from.
 
 ## Other services
 
@@ -40,6 +45,7 @@ python3 water_meter.py                  # terminal meter
 python3 water_meter.py --days 30        # last 30 days only
 python3 water_meter.py --html out.html  # visual report
 python3 water_meter.py --export u.json  # compact file for the web app
+python3 water_meter.py --conversations conversations-000.zip
 python3 water_meter.py --json           # machine-readable totals
 ```
 

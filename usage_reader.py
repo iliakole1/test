@@ -48,9 +48,16 @@ class UsageTotals:
     first: datetime = None
     last: datetime = None
 
-    def add(self, call: ApiCall) -> None:
+    def add(self, call: ApiCall, counts_as_call: bool = True) -> None:
+        """Fold a call into the totals.
+
+        `counts_as_call` is False for usage that consumed tokens without being a
+        response of its own -- a human chat message, whose text is billed as
+        input to the reply that follows it.
+        """
         self.tokens = self.tokens + call.tokens
-        self.calls += 1
+        if counts_as_call:
+            self.calls += 1
         self.by_date[call.date] = self.by_date[call.date] + call.tokens
         self.by_model[call.model] = self.by_model[call.model] + call.tokens
         self.by_project[call.project] = self.by_project[call.project] + call.tokens

@@ -123,13 +123,14 @@
           <input type="file" id="pick-dir" webkitdirectory directory multiple hidden>
         </label>
         <label class="btn btn-file">
-          conversations.json
-          <input type="file" id="pick-file" accept=".json,.jsonl" multiple hidden>
+          Claude data export
+          <input type="file" id="pick-file" accept=".zip,.json,.jsonl" multiple hidden>
         </label>
       </div>
       <p class="drop-help">
         <strong>Claude Code:</strong> choose your <code>~/.claude/projects</code> folder &mdash; every session in it counts.<br>
-        <strong>Claude chat:</strong> Settings &rarr; Privacy &rarr; Export data, then drop the <code>conversations.json</code> from the email.<br>
+        <strong>Claude chat:</strong> Settings &rarr; Privacy &rarr; Export data, then drop the
+        <code>conversations-000.zip</code> straight from the email &mdash; no need to unzip it.<br>
         <strong>On a phone, or a very large history:</strong> run <code>water_meter.py --export usage.json</code> and drop that one small file instead.
       </p>
       <p class="drop-status" id="drop-status" hidden></p>

@@ -221,6 +221,11 @@ def main(argv=None) -> int:
         help=f"directory holding Claude Code transcripts (default: {DEFAULT_ROOT})",
     )
     parser.add_argument("--days", type=int, help="only count the last N days")
+    parser.add_argument(
+        "--conversations", type=Path, nargs="+", metavar="FILE",
+        help="also count a claude.ai data export (.zip or .json); tokens there "
+             "are estimated from text length, so they are rougher",
+    )
     parser.add_argument("--html", type=Path, help="write a visual HTML report to this path")
     parser.add_argument("--json", action="store_true", help="print totals as JSON")
     parser.add_argument(
@@ -242,6 +247,11 @@ def main(argv=None) -> int:
         model = replace(model, ml_per_wh=args.ml_per_wh)
     since = date.today() - timedelta(days=args.days) if args.days else None
     totals = collect(args.root, include_sidechains=not args.no_sidechains, since=since)
+
+    if args.conversations:
+        from conversations import collect_conversations
+
+        collect_conversations(args.conversations, totals)
 
     if args.json:
         print(json.dumps(to_dict(totals, model), indent=2))

@@ -275,3 +275,77 @@ class SingleFileBuild(unittest.TestCase):
     def test_inlined_constants_parse_and_match_the_source_file(self):
         blob = re.search(r"window\.WATER_CONSTANTS = (\{.*?\});", self.fragment, re.S).group(1)
         self.assertEqual(json.loads(blob), load_constants())
+
+
+@unittest.skipIf(NODE is None, "node is not available")
+class JsZipReader(unittest.TestCase):
+    """The app reads the export ZIPs directly, so the reader must handle real ones."""
+
+    def setUp(self):
+        self._tmp = __import__("tempfile").TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def read_zip(self, path):
+        return run_js(
+            "const fs = require('fs');\n"
+            f"const buf = fs.readFileSync({str(path)!r});\n"
+            "const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);\n"
+            "W.readZip(ab).then(e => console.log(JSON.stringify(e)))"
+            "  .catch(err => console.log(JSON.stringify({error: err.message})));"
+        )
+
+    def test_reads_deflated_and_stored_members(self):
+        import zipfile
+        path = self.dir / "a.zip"
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr("deflated.json", '{"a":1}', zipfile.ZIP_DEFLATED)
+            z.writestr("stored.json", '{"b":2}', zipfile.ZIP_STORED)
+        by_name = {e["name"]: e["text"] for e in self.read_zip(path)}
+        self.assertEqual(by_name["deflated.json"], '{"a":1}')
+        self.assertEqual(by_name["stored.json"], '{"b":2}')
+
+    def test_directory_entries_are_skipped_but_nested_files_are_kept(self):
+        import zipfile
+        path = self.dir / "b.zip"
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr("folder/", "")
+            z.writestr("folder/inner.json", '{"c":3}')
+        names = [e["name"] for e in self.read_zip(path)]
+        self.assertEqual(names, ["folder/inner.json"])
+
+    def test_a_large_deflated_member_round_trips(self):
+        import zipfile, json as _json
+        payload = _json.dumps([{"text": "y" * 50_000}])
+        path = self.dir / "c.zip"
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("big.json", payload)
+        self.assertEqual(self.read_zip(path)[0]["text"], payload)
+
+    def test_python_and_js_agree_on_the_same_archive(self):
+        import zipfile, json as _json
+        convos = [{"uuid": "c1", "created_at": "2026-09-01T10:00:00Z", "chat_messages": [
+            {"sender": "human", "text": "x" * 400, "created_at": "2026-09-01T10:00:00Z"},
+            {"sender": "assistant", "created_at": "2026-09-01T10:00:01Z",
+             "content": [{"type": "text", "text": "y" * 800}]}]}]
+        path = self.dir / "d.zip"
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("conversations.json", _json.dumps(convos))
+
+        entry = self.read_zip(path)[0]
+        js = run_js(
+            f"const out = W.emptyImport();\n"
+            f"W.parseConversations(JSON.parse({json.dumps(entry['text'])}), out);\n"
+            "console.log(JSON.stringify({i: out.tokens.input, o: out.tokens.output}));"
+        )
+        from conversations import collect_conversations
+        py = collect_conversations([path])
+        self.assertEqual(js["i"], py.tokens.input)
+        self.assertEqual(js["o"], py.tokens.output)
+
+    def test_a_non_zip_reports_a_clear_error(self):
+        path = self.dir / "e.zip"
+        path.write_bytes(b"this is definitely not a zip file" * 10)
+        self.assertIn("ZIP", self.read_zip(path)["error"])

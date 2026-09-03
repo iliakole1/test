@@ -170,6 +170,80 @@
     return "";
   }
 
+
+  /* ---------- ZIP reading ---------- */
+
+  /* The claude.ai data export arrives as ZIPs, so the app reads them directly
+   * rather than making you unzip first. This is a minimal reader for the one
+   * case that matters: stored and deflated entries in a non-ZIP64 archive. It
+   * uses DecompressionStream rather than pulling in a library, which keeps the
+   * app dependency-free and working offline.
+   *
+   * Sizes are taken from the central directory, not the local headers, because
+   * an archive written as a stream leaves the local sizes zeroed. */
+
+  var SIG_EOCD = 0x06054b50;
+  var SIG_CENTRAL = 0x02014b50;
+
+  function findEndOfCentralDirectory(view) {
+    // The record is at the end, after a comment of up to 65535 bytes.
+    var min = Math.max(0, view.byteLength - 22 - 65535);
+    for (var i = view.byteLength - 22; i >= min; i--) {
+      if (view.getUint32(i, true) === SIG_EOCD) return i;
+    }
+    return -1;
+  }
+
+  async function inflateRaw(bytes) {
+    if (typeof DecompressionStream === "undefined") {
+      throw new Error("This browser cannot unzip files. Unzip it yourself and drop the .json.");
+    }
+    var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Response(stream).arrayBuffer();
+  }
+
+  /** Read a ZIP into [{name, text}], skipping directories and unreadable entries. */
+  async function readZip(buffer) {
+    var view = new DataView(buffer);
+    var eocd = findEndOfCentralDirectory(view);
+    if (eocd < 0) throw new Error("That does not look like a ZIP file.");
+
+    var count = view.getUint16(eocd + 10, true);
+    var offset = view.getUint32(eocd + 16, true);
+    if (offset === 0xffffffff) throw new Error("ZIP64 archives are not supported. Unzip it yourself and drop the .json.");
+
+    var decoder = new TextDecoder("utf-8");
+    var entries = [];
+
+    for (var i = 0; i < count && offset + 46 <= buffer.byteLength; i++) {
+      if (view.getUint32(offset, true) !== SIG_CENTRAL) break;
+      var method = view.getUint16(offset + 10, true);
+      var compressedSize = view.getUint32(offset + 20, true);
+      var nameLength = view.getUint16(offset + 28, true);
+      var extraLength = view.getUint16(offset + 30, true);
+      var commentLength = view.getUint16(offset + 32, true);
+      var localOffset = view.getUint32(offset + 42, true);
+      var name = decoder.decode(new Uint8Array(buffer, offset + 46, nameLength));
+      offset += 46 + nameLength + extraLength + commentLength;
+
+      if (name.endsWith("/")) continue; // a directory entry holds no data
+
+      // The local header repeats the name and extra field at its own lengths.
+      var localNameLength = view.getUint16(localOffset + 26, true);
+      var localExtraLength = view.getUint16(localOffset + 28, true);
+      var dataStart = localOffset + 30 + localNameLength + localExtraLength;
+      var raw = new Uint8Array(buffer, dataStart, compressedSize);
+
+      try {
+        var bytes = method === 0 ? raw : new Uint8Array(await inflateRaw(raw));
+        entries.push({ name: name, text: decoder.decode(bytes) });
+      } catch (e) {
+        // One unreadable member should not lose the rest of the archive.
+      }
+    }
+    return entries;
+  }
+
   function emptyImport() {
     return { calls: 0, tokens: emptyTokens(), days: {} };
   }
@@ -186,5 +260,6 @@
     emptyImport: emptyImport,
     parseTranscript: parseTranscript,
     parseConversations: parseConversations,
+    readZip: readZip,
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -314,7 +314,7 @@
     var key = ids.map(function (id) {
       var wh = agg.byService[id];
       return '<div><i style="background:' + serviceAccent(id) + '"></i><span>' + esc(serviceLabel(id)) +
-        '</span><span class="v">' + ((wh / agg.totalWh) * 100).toFixed(1) + " &middot; " +
+        '</span><span class="v">' + ((wh / agg.totalWh) * 100).toFixed(1) + "% &middot; " +
         W.formatVolume(wh * mlPerWh()) + "</span></div>";
     }).join("");
 
@@ -574,44 +574,67 @@
     });
   }
 
-  async function importFiles(files) {
-    var list = Array.prototype.slice.call(files);
-    var transcripts = list.filter(function (f) { return f.name.endsWith(".jsonl"); });
-    var exports_ = list.filter(function (f) { return f.name.endsWith(".json"); });
+  /** Expand any archives, then route every member by what it actually is. */
+  async function collectMembers(files) {
+    var members = [];
+    var failures = [];
+    for (var i = 0; i < files.length; i++) {
+      var file = files[i];
+      if (/\.zip$/i.test(file.name)) {
+        try {
+          var entries = await W.readZip(await file.arrayBuffer());
+          entries.forEach(function (entry) { members.push(entry); });
+        } catch (e) {
+          failures.push(file.name + ": " + e.message);
+        }
+      } else {
+        members.push({ name: file.name, text: await readFile(file) });
+      }
+    }
+    return { members: members, failures: failures };
+  }
 
-    if (!transcripts.length && !exports_.length) {
-      status("No .jsonl transcripts or .json export found in that selection.", true);
+  async function importFiles(files) {
+    var found = await collectMembers(Array.prototype.slice.call(files));
+    var members = found.members;
+
+    var transcripts = members.filter(function (m) { return /\.jsonl$/i.test(m.name); });
+    var jsons = members.filter(function (m) { return /\.json$/i.test(m.name); });
+
+    if (!transcripts.length && !jsons.length) {
+      status(found.failures.length
+        ? found.failures.join("; ")
+        : "No transcripts or export found in that selection.", true);
       return;
     }
 
-    status("Reading " + (transcripts.length + exports_.length) + " file(s)…");
+    status("Reading " + members.length + " file(s)…");
     dropDemo();
 
     if (transcripts.length) {
       var seen = new Set();
       var out = W.emptyImport();
-      for (var i = 0; i < transcripts.length; i++) {
-        W.parseTranscript(await readFile(transcripts[i]), seen, out);
-      }
+      transcripts.forEach(function (m) { W.parseTranscript(m.text, seen, out); });
       if (out.calls) {
         out.importedAt = new Date().toISOString();
         state.imports["claude-code"] = out;
       }
     }
 
-    var chatMessages = 0;
+    // The chat export splits across several files, so accumulate rather than
+    // letting the last one win.
+    var chat = W.emptyImport();
     var exportedCalls = 0;
-    for (var j = 0; j < exports_.length; j++) {
-      var text = await readFile(exports_[j]);
+
+    for (var j = 0; j < jsons.length; j++) {
       var parsed;
       try {
-        parsed = JSON.parse(text);
+        parsed = JSON.parse(jsons[j].text);
       } catch (e) {
         continue;
       }
 
-      // A summary written by `water_meter.py --export`: already counted and
-      // deduplicated, so take it as-is.
+      // A summary from `water_meter.py --export`: already counted and deduped.
       if (parsed && parsed.format === "ai-water-meter-export") {
         state.imports[parsed.source || "claude-code"] = {
           calls: parsed.calls || 0,
@@ -623,13 +646,12 @@
         continue;
       }
 
-      var chat = W.emptyImport();
       W.parseConversations(parsed, chat);
-      if (chat.calls) {
-        chat.importedAt = new Date().toISOString();
-        state.imports["claude-chat"] = chat;
-        chatMessages = chat.calls;
-      }
+    }
+
+    if (chat.calls) {
+      chat.importedAt = new Date().toISOString();
+      state.imports["claude-chat"] = chat;
     }
 
     save();
@@ -639,8 +661,12 @@
     var cc = state.imports["claude-code"];
     if (cc && transcripts.length) parts.push(W.formatInt(cc.calls) + " Claude Code API calls");
     if (exportedCalls) parts.push(W.formatInt(exportedCalls) + " API calls from an export");
-    if (chatMessages) parts.push(W.formatInt(chatMessages) + " chat responses");
-    status(parts.length ? "Imported " + parts.join(" and ") + "." : "Nothing countable found in those files.", !parts.length);
+    if (chat.calls) parts.push(W.formatInt(chat.calls) + " chat responses");
+    var message = parts.length
+      ? "Imported " + parts.join(" and ") + "."
+      : "Nothing countable found in those files.";
+    if (found.failures.length) message += " (" + found.failures.join("; ") + ")";
+    status(message, !parts.length);
   }
 
   /* ---------- wiring ---------- */
