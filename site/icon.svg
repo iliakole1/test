@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="AI Water Meter">
+  <rect width="512" height="512" rx="96" fill="#15212A"/>
+  <circle cx="256" cy="256" r="168" fill="none" stroke="#2E4450" stroke-width="18"/>
+  <circle cx="256" cy="256" r="168" fill="none" stroke="#1F7A8C" stroke-width="18"
+          stroke-linecap="round" stroke-dasharray="791 1056" transform="rotate(-90 256 256)"/>
+  <path d="M256 140c0 0 84 96 84 152a84 84 0 1 1-168 0c0-56 84-152 84-152z" fill="#4FB3C6"/>
+  <path d="M256 140c0 0 84 96 84 152a84 84 0 0 1-84 84z" fill="#1F7A8C"/>
+  <circle cx="256" cy="256" r="14" fill="#B3402F"/>
+</svg>

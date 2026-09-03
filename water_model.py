@@ -22,7 +22,21 @@ one in a hot dry one differ by more than 10x. Every constant is overridable so
 you can substitute better numbers when you have them.
 """
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
+
+# The web app and the CLI share one constants file so the two implementations
+# cannot drift on the numbers. Built-in defaults below keep the CLI working if
+# the file is missing or unreadable.
+CONSTANTS_PATH = Path(__file__).parent / "site" / "constants.json"
+
+
+def load_constants() -> dict:
+    try:
+        return json.loads(CONSTANTS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
 
 
 @dataclass(frozen=True)
@@ -38,6 +52,21 @@ class WaterModel:
     # Millilitres of water consumed per watt-hour, on-site cooling plus the
     # water used to generate the power.
     ml_per_wh: float = 1.08
+
+    @classmethod
+    def from_constants(cls) -> "WaterModel":
+        """Build a model from site/constants.json, falling back per-field."""
+        data = load_constants()
+        tokens = data.get("claude_tokens_wh") or {}
+        water = data.get("water") or {}
+        defaults = cls()
+        return cls(
+            wh_per_output_token=tokens.get("output", defaults.wh_per_output_token),
+            wh_per_input_token=tokens.get("input", defaults.wh_per_input_token),
+            wh_per_cache_write_token=tokens.get("cache_write", defaults.wh_per_cache_write_token),
+            wh_per_cache_read_token=tokens.get("cache_read", defaults.wh_per_cache_read_token),
+            ml_per_wh=water.get("ml_per_wh", defaults.ml_per_wh),
+        )
 
     def energy_wh(self, tokens: "TokenCounts") -> float:
         return (
@@ -77,7 +106,11 @@ class TokenCounts:
 # Household figures are typical US/EU values; the food and textile figures are
 # water footprints covering the whole supply chain, which is why they dwarf the
 # rest.
-COMPARISONS = [
+_SHARED_COMPARISONS = [
+    (c["label"], c["ml"]) for c in load_constants().get("comparisons", [])
+]
+
+COMPARISONS = _SHARED_COMPARISONS or [
     ("a teaspoon", 5),
     ("a shot glass", 44),
     ("a cup of coffee", 240),

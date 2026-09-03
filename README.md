@@ -1,79 +1,110 @@
-# Claude Water Meter
+# AI Water Meter
 
-Reads your local Claude Code transcripts and estimates how much water the
-datacenters consumed running them.
+Estimates the water your AI usage costs the datacenters running it — Claude,
+Weavy, Gemini — from your own data, on your own device.
+
+- **Web app** (`site/`) — imports your Claude history, tracks credit- and
+  request-based services, installs to an Android home screen as a PWA.
+- **Chrome extension** (`extension/`) — the same app in a toolbar popup.
+- **Command line** (`water_meter.py`) — a terminal meter and an HTML report.
+
+Everything runs locally. Your usage is never uploaded, and the app has no
+backend to upload it to.
+
+## Getting your Claude usage in
+
+There is no API that hands over your Claude history, so the app reads the files
+Claude already keeps on your machine. Three ways in, all client-side:
+
+| You have | Do this |
+| --- | --- |
+| Claude Code | Drop your `~/.claude/projects` folder on the page |
+| Claude chat | Settings → Privacy → Export data, drop the `conversations.json` |
+| A huge history, or a phone | Run `water_meter.py --export usage.json`, drop that one file |
+
+Claude Code transcripts carry exact token counts. The chat export carries only
+message text, so tokens there are estimated at ~4 characters per token and are
+correspondingly rougher.
+
+## Other services
+
+**Weavy** is priced in credits, so the meter is too: log an operation and its
+credit cost, and the water follows. Image generation (9), video generation (164)
+and video upscaling (12) ship as presets; add your own for anything else.
+**Gemini Pro** is counted per request. Both rates are editable under Assumptions.
+
+## Command line
 
 ```
-python3 water_meter.py                  # meter for all recorded usage
-python3 water_meter.py --days 30        # only the last 30 days
-python3 water_meter.py --html out.html  # a visual report
+python3 water_meter.py                  # terminal meter
+python3 water_meter.py --days 30        # last 30 days only
+python3 water_meter.py --html out.html  # visual report
+python3 water_meter.py --export u.json  # compact file for the web app
 python3 water_meter.py --json           # machine-readable totals
 ```
 
-No dependencies beyond the standard library. Run it on the machine where you
-actually use Claude Code — it reads `~/.claude/projects/**/*.jsonl`, which is
-where Claude Code logs its sessions, and never sends anything anywhere.
-
-```
-  CLAUDE WATER METER
-  ==============================================
-
-   ______________________
-  |                      |
-  |                      |
-  |----------------------|
-  |######################|
-  |######################|
-  |______________________|
-
-    32.5 mL  =  73.9% of a shot glass
-```
+No dependencies beyond the standard library.
 
 ## How the estimate works
 
-Nobody publishes a per-token water figure for Claude, so this is a model, not a
-meter reading. It runs in two steps.
+Usage becomes energy, energy becomes water. Every constant lives in
+`site/constants.json`, which the web app and the CLI both read, so the two can
+never disagree.
 
-**Tokens to energy.** Generating a token means one forward pass through the
-model to produce one token, which uses the hardware poorly and costs roughly
-`0.6 mWh`. Reading the prompt is far cheaper per token, because the whole prompt
-goes through in parallel — about a tenth as much for fresh input, and less again
-for tokens served from the prompt cache. The four rates are scaled against each
-other by their billing ratios, which track how much work each actually skips.
+**Claude** is counted from tokens. Generating a token is one forward pass that
+uses the hardware poorly, at about `0.6 mWh`. Reading the prompt is roughly ten
+times cheaper per token because the whole prompt goes through in parallel, and
+cached tokens cheaper again; the four rates are scaled by their billing ratios.
 
-**Energy to water.** At `1.08 mL/Wh`, the rate implied by Google's 2025
-disclosure that a median Gemini text prompt uses 0.24 Wh and 0.26 mL. That
-covers both on-site cooling and the water used generating the electricity.
+**Weavy** is counted from credits at `0.32 Wh` each, anchored on Luccioni et al.
+(2024), which measured ~2.9 Wh for one image from the largest generation models
+tested — 9 credits per image at Weavy's rate. Credits then price every other
+operation for free.
 
-Every constant lives in `water_model.py` and is overridable; `--ml-per-wh` sets
-the water intensity from the command line.
+**Gemini Pro** defaults to `1 Wh` per request: Google puts a *median* Gemini text
+prompt at 0.24 Wh, and Pro is the larger model and usually reasons first. The
+roughest number here.
+
+**Energy to water** is `1.08 mL/Wh`, implied by Google's 2025 disclosure that a
+median Gemini text prompt uses 0.24 Wh and 0.26 mL. It covers on-site cooling
+plus the water used generating the electricity.
 
 ## How wrong is it?
 
-Order-of-magnitude. The real figure swings by more than tenfold with model size,
+Order-of-magnitude. Real intensity swings more than tenfold with model size,
 hardware, batch size, and above all datacenter location — an evaporatively
-cooled site in a hot dry region drinks far more than a cool-climate one. The
-numbers here are useful for relative comparisons (which project, which week,
-what a cache hit saves you) and for a sense of scale. They are not a bill.
+cooled site in a hot dry region drinks far more than a cool-climate one. These
+numbers are useful for relative comparisons (which tool, which week, what a
+cache hit saves you) and for a sense of scale. They are not a bill.
 
 For scale: heavy daily agentic use lands in the tens of millilitres per day, so
-a year of it is a few dozen litres — under a single bath, and a rounding error
-against the ~1,100 L a household gets through in a day. The water cost of AI is
-a real question, but it is a question about datacenter siting and aggregate
-demand, not about whether you personally send one more prompt.
+a year of it is a few dozen litres — under a single bath, against the ~1,100 L
+an average household gets through in a day. The water cost of AI is a real
+question, but it is a question about datacenter siting and aggregate demand, not
+about whether you personally send one more prompt.
 
 ## Counting
 
-Claude Code writes each API response to the transcript several times as it
-streams, and every copy repeats the same cumulative usage block. Entries are
-deduplicated on `(message id, request id)` before anything is summed — without
-that, every total comes out three or four times too high.
+Claude Code writes each API response to its transcript several times as it
+streams, and every copy repeats the same cumulative usage block. Both the Python
+and JavaScript readers deduplicate on `(message id, request id)` before summing
+— without that, every total comes out three or four times too high. Subagent
+calls count by default; `--no-sidechains` excludes them.
 
-Subagent calls are counted by default, since they are real usage;
-`--no-sidechains` excludes them.
-
-## Tests
+## Building and testing
 
 ```
-python3 -m unittest test_water_meter -v
+python3 -m unittest discover -p "test_*.py" -v   # 56 tests, incl. the JS model via node
+python3 build_extension.py                        # assemble extension/ from site/
+python3 build_artifact.py out.html                # inline the app into one file
 ```
+
+`extension/` is generated from `site/` rather than kept as a second copy, so the
+two cannot drift; only its `manifest.json` is checked in.
+
+## Deploying
+
+`.github/workflows/pages.yml` runs the tests and publishes `site/` to GitHub
+Pages on every push to `main`. The repository must be public (or on a plan with
+private Pages), and Pages must be set to deploy from **GitHub Actions** under
+Settings → Pages.

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Estimate the water footprint of your AI usage -- Claude, Weavy, Gemini -- from your own data, in your own browser.">
+<meta name="theme-color" content="#1F7A8C">
+<title>AI Water Meter</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="sheet">
+
+  <header class="masthead">
+    <div>
+      <h1>AI Water Meter</h1>
+      <p class="tagline">What your AI habit drinks, estimated from your own usage.</p>
+    </div>
+    <div class="period">
+      <span class="label">Period of record</span>
+      <span class="num" id="period-range">&mdash;</span>
+      <span class="num" id="period-detail">no usage logged yet</span>
+    </div>
+  </header>
+
+  <div id="demo-banner" class="banner" hidden>
+    <span><strong>Example data.</strong> These are made-up figures so you can see the meter working. Clear them once you have imported or logged your own.</span>
+    <button type="button" class="btn btn-quiet" id="clear-demo">Clear example data</button>
+  </div>
+
+  <div class="meter">
+    <div>
+      <span class="label">Cumulative reading</span>
+      <div id="register" class="register-slot"></div>
+      <p class="reading-note" id="reading-note"></p>
+    </div>
+    <div id="dial"></div>
+  </div>
+
+  <section>
+    <h2>Where that falls</h2>
+    <p class="caption">Everyday volumes on a logarithmic scale &mdash; each tick is ten times the last.</p>
+    <div id="rail" class="rail-wrap"></div>
+  </section>
+
+  <section>
+    <h2>Log usage</h2>
+    <p class="caption">Tap a preset to add one, or set a count and date below. Weavy is priced in credits,
+      so any operation you can name a credit cost for can be tracked.</p>
+    <div class="quickadd" id="quickadd"></div>
+    <form class="addform" id="addform">
+      <div class="field">
+        <label for="f-op">Operation</label>
+        <select id="f-op" name="op"></select>
+      </div>
+      <div class="field field-narrow">
+        <label for="f-count">Count</label>
+        <input type="number" id="f-count" name="count" value="1" min="1" step="1" required>
+      </div>
+      <div class="field field-narrow">
+        <label for="f-date">Date</label>
+        <input type="date" id="f-date" name="date" required>
+      </div>
+      <button type="submit" class="btn">Add</button>
+    </form>
+    <details class="custom">
+      <summary>Add a custom operation</summary>
+      <form class="addform" id="customform">
+        <div class="field">
+          <label for="c-service">Service</label>
+          <select id="c-service" name="service"></select>
+        </div>
+        <div class="field">
+          <label for="c-label">Name</label>
+          <input type="text" id="c-label" name="label" placeholder="e.g. Style transfer" required>
+        </div>
+        <div class="field field-narrow">
+          <label for="c-units" id="c-units-label">Credits each</label>
+          <input type="number" id="c-units" name="units" value="9" min="0" step="any" required>
+        </div>
+        <button type="submit" class="btn">Save preset</button>
+      </form>
+    </details>
+  </section>
+
+  <div class="split">
+    <section class="flush">
+      <h2>By source</h2>
+      <p class="caption">Share of water by which tool drew it.</p>
+      <div id="sources"></div>
+    </section>
+    <section class="flush">
+      <h2>The reading</h2>
+      <dl class="rows" id="reading-rows"></dl>
+    </section>
+  </div>
+
+  <section id="daily-section" hidden>
+    <h2>Water drawn per day</h2>
+    <p class="caption">Deepest day highlighted. Hover a bar for its reading.</p>
+    <div id="daily" class="chart-wrap"></div>
+  </section>
+
+  <section id="entries-section" hidden>
+    <h2>Logged usage</h2>
+    <div id="entries"></div>
+  </section>
+
+  <section>
+    <h2>Import Claude usage</h2>
+    <p class="caption">Everything is parsed in this browser and stored on this device. Nothing is uploaded.</p>
+    <div class="drop" id="drop">
+      <p class="drop-lead">Drop files here, or pick what you have:</p>
+      <div class="drop-actions">
+        <label class="btn btn-file">
+          Claude Code transcripts
+          <input type="file" id="pick-dir" webkitdirectory directory multiple hidden>
+        </label>
+        <label class="btn btn-file">
+          conversations.json
+          <input type="file" id="pick-file" accept=".json,.jsonl" multiple hidden>
+        </label>
+      </div>
+      <p class="drop-help">
+        <strong>Claude Code:</strong> choose your <code>~/.claude/projects</code> folder &mdash; every session in it counts.<br>
+        <strong>Claude chat:</strong> Settings &rarr; Privacy &rarr; Export data, then drop the <code>conversations.json</code> from the email.<br>
+        <strong>On a phone, or a very large history:</strong> run <code>water_meter.py --export usage.json</code> and drop that one small file instead.
+      </p>
+      <p class="drop-status" id="drop-status" hidden></p>
+    </div>
+  </section>
+
+  <details class="settings">
+    <summary>Assumptions</summary>
+    <p class="caption">Every number here is a rough default. Change one and the whole meter recalculates.</p>
+    <div class="settings-grid" id="settings-grid"></div>
+    <button type="button" class="btn btn-quiet" id="reset-settings">Reset to defaults</button>
+  </details>
+
+  <div class="note">
+    <h2>How this is estimated</h2>
+    <p>Nobody publishes per-request water figures, so this is a model, not a meter reading. Usage
+      is converted to energy, and energy to water at <code id="note-rate">1.08 mL/Wh</code> &mdash; the rate
+      implied by Google&rsquo;s 2025 disclosure that a median Gemini text prompt uses 0.24&nbsp;Wh and
+      0.26&nbsp;mL, covering both on-site cooling and the water used generating the electricity.</p>
+    <p><strong>Claude</strong> is counted from tokens: about <code id="note-out">0.60 mWh</code> per generated
+      token and roughly a tenth of that per prompt token. <strong>Weavy</strong> is counted from credits,
+      anchored on a measured ~2.9&nbsp;Wh per generated image at 9 credits. <strong>Gemini Pro</strong> is
+      counted per request.</p>
+    <p>Treat totals as an order of magnitude. Real intensity swings more than tenfold with model size,
+      hardware, batch size, and above all datacenter location: an evaporatively cooled site in a hot dry
+      region drinks far more than a cool-climate one. For scale, an average household gets through about
+      1,100&nbsp;L in a day &mdash; the water cost of AI is a real question, but it is one about datacenter
+      siting and aggregate demand, not about whether you send one more prompt.</p>
+    <p class="note-foot">
+      Runs entirely in your browser; your usage never leaves this device.
+      <a href="https://github.com/iliakole1/test" rel="noopener">Source and the command-line version</a>.
+    </p>
+  </div>
+</div>
+
+<script src="water-model.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

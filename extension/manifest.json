@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "AI Water Meter",
+  "version": "1.0.0",
+  "description": "The water footprint of your AI usage, estimated from your own data. Runs entirely locally.",
+  "permissions": ["storage"],
+  "action": {
+    "default_title": "AI Water Meter",
+    "default_popup": "index.html",
+    "default_icon": { "192": "icon-192.png", "512": "icon-512.png" }
+  },
+  "icons": { "192": "icon-192.png", "512": "icon-512.png" }
+}

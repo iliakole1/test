@@ -14,7 +14,8 @@ estimate is built and how rough it is.
 import argparse
 import json
 import sys
-from datetime import date, timedelta
+from dataclasses import replace
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from usage_reader import DEFAULT_ROOT, collect
@@ -184,6 +185,32 @@ def to_dict(totals, model: WaterModel) -> dict:
     }
 
 
+def export_payload(totals) -> dict:
+    """A compact summary the web app imports, carrying no prompt or file content."""
+    return {
+        "format": "ai-water-meter-export",
+        "version": 1,
+        "source": "claude-code",
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "calls": totals.calls,
+        "tokens": {
+            "input": totals.tokens.input,
+            "output": totals.tokens.output,
+            "cache_write": totals.tokens.cache_write,
+            "cache_read": totals.tokens.cache_read,
+        },
+        "days": {
+            day: {
+                "input": t.input,
+                "output": t.output,
+                "cache_write": t.cache_write,
+                "cache_read": t.cache_read,
+            }
+            for day, t in sorted(totals.by_date.items())
+        },
+    }
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Estimate the water footprint of your Claude usage.",
@@ -197,16 +224,22 @@ def main(argv=None) -> int:
     parser.add_argument("--html", type=Path, help="write a visual HTML report to this path")
     parser.add_argument("--json", action="store_true", help="print totals as JSON")
     parser.add_argument(
+        "--export", type=Path, metavar="FILE",
+        help="write a compact file to import into the web app or phone",
+    )
+    parser.add_argument(
         "--no-sidechains", action="store_true",
         help="exclude subagent calls, counting only the main conversation",
     )
     parser.add_argument(
-        "--ml-per-wh", type=float, default=WaterModel.ml_per_wh,
-        help="water intensity of the datacenter and its power (default: %(default)s)",
+        "--ml-per-wh", type=float,
+        help="override the water intensity of the datacenter and its power, in mL/Wh",
     )
     args = parser.parse_args(argv)
 
-    model = WaterModel(ml_per_wh=args.ml_per_wh)
+    model = WaterModel.from_constants()
+    if args.ml_per_wh is not None:
+        model = replace(model, ml_per_wh=args.ml_per_wh)
     since = date.today() - timedelta(days=args.days) if args.days else None
     totals = collect(args.root, include_sidechains=not args.no_sidechains, since=since)
 
@@ -214,6 +247,11 @@ def main(argv=None) -> int:
         print(json.dumps(to_dict(totals, model), indent=2))
     else:
         print(report_text(totals, model, args.root))
+
+    if args.export:
+        args.export.write_text(json.dumps(export_payload(totals), indent=2), encoding="utf-8")
+        if not args.json:
+            print(f"  Wrote {args.export} — drop this on the web app to import it.\n")
 
     if args.html:
         from html_report import write_report

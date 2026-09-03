@@ -1,0 +1,71 @@
+{
+  "_comment": "Single source of truth for the water model. water_model.py reads this file too, so editing it here changes the CLI as well.",
+  "water": {
+    "ml_per_wh": 1.08,
+    "_source": "Implied by Google's 2025 disclosure that a median Gemini text prompt uses 0.24 Wh and 0.26 mL. Covers on-site cooling plus the water used generating the electricity."
+  },
+  "claude_tokens_wh": {
+    "output": 0.0006,
+    "input": 0.00006,
+    "cache_write": 0.000075,
+    "cache_read": 0.000006,
+    "_source": "Generating a token is one forward pass and uses the hardware poorly. Prefill runs the prompt through in parallel, roughly ten times cheaper per token; the variants are scaled by their billing ratios (cache write 1.25x input, cache read 0.1x)."
+  },
+  "services": {
+    "claude-code": {
+      "label": "Claude Code",
+      "kind": "tokens",
+      "accent": "#1F7A8C"
+    },
+    "claude-chat": {
+      "label": "Claude (chat)",
+      "kind": "tokens",
+      "accent": "#3E9DAE"
+    },
+    "weavy": {
+      "label": "Weavy",
+      "kind": "credits",
+      "unit": "credit",
+      "wh_per_unit": 0.32,
+      "accent": "#A0742C",
+      "_source": "Anchored on Luccioni et al. (2024), which measured ~2.9 Wh for a single image from the largest generation models tested. At Weavy's 9 credits per image that is ~0.32 Wh per credit, and credits then price every other operation for free.",
+      "operations": [
+        { "label": "Image generation", "units": 9 },
+        { "label": "Video generation", "units": 164 },
+        { "label": "Video upscaling", "units": 12 }
+      ]
+    },
+    "gemini-pro": {
+      "label": "Gemini Pro",
+      "kind": "requests",
+      "unit": "request",
+      "wh_per_unit": 1.0,
+      "accent": "#6E7DA8",
+      "_source": "Google puts a median Gemini text prompt at 0.24 Wh. Pro is the larger model and usually reasons before answering, so this defaults to roughly four times the median. A rough default -- change it in Assumptions.",
+      "operations": [{ "label": "Request", "units": 1 }]
+    }
+  },
+  "comparisons": [
+    { "label": "a teaspoon", "ml": 5 },
+    { "label": "a shot glass", "ml": 44 },
+    { "label": "a cup of coffee", "ml": 240 },
+    { "label": "a water bottle", "ml": 500 },
+    { "label": "a kettle boiled full", "ml": 1700 },
+    { "label": "a toilet flush", "ml": 6000 },
+    { "label": "a dishwasher cycle", "ml": 15000 },
+    { "label": "a washing machine load", "ml": 50000 },
+    { "label": "a 10-minute shower", "ml": 65000 },
+    { "label": "a full bathtub", "ml": 150000 },
+    { "label": "a day of average household water use", "ml": 1135000 },
+    { "label": "a pair of jeans (supply chain)", "ml": 8000000 }
+  ],
+  "rail_marks": [
+    { "label": "teaspoon", "ml": 5 },
+    { "label": "cup", "ml": 240 },
+    { "label": "kettle", "ml": 1700 },
+    { "label": "flush", "ml": 6000 },
+    { "label": "shower", "ml": 65000 },
+    { "label": "bathtub", "ml": 150000 },
+    { "label": "household/day", "ml": 1135000 }
+  ]
+}
